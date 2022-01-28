@@ -19,126 +19,71 @@
       "description": "The task or plan parameters to use for this run.",
       "additionalProperties": true
     },
-    "projectDir": {
-      "type": "string",
-      "description": "The Bolt project directory.",
-      "default": "."
-    },
-    "modulePaths": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "A list of additional directories outside of the project directory to add to the Bolt module path."
-    },
-    "installModules": {
-      "type": "boolean",
-      "description": "Download and install modules listed in a `Puppetfile`.",
-      "default": false
-    },
-    "transport": {
-      "type": "object",
-      "description": "The default transport to use when connecting to the target nodes.",
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "ssh",
-            "winrm"
-          ],
-          "description": "The transport type."
-        },
-        "user": {
-          "type": "string",
-          "description": "The username to use to connect."
-        },
-        "password": {
-          "type": "string",
-          "description": "The password to use to connect."
-        },
-        "privateKey": {
-          "type": "string",
-          "description": "The name of a key in the `credentials` setting to use as the default SSH private key."
-        },
-        "run_as": {
-          "type": "string",
-          "description": "The username to use to run the task/plan"
-        },
-        "useSSL": {
-          "type": "boolean",
-          "description": "If using the WinRM transport, whether to use SSL to connect.",
-          "default": true
-        },
-        "verifyHost": {
-          "type": "boolean",
-          "description": "Whether to verify host integrity when connecting to remote nodes.",
-          "default": true
-        },
-        "proxyJump": {
-          "type": "string",
-          "description": "If using the SSH transport, a hostname or user@hostname to use as a bastion when connecting to nodes."
-        }
-      }
-    },
     "targets": {
+      "description": "Targets for this action. Either as a comma-separated string, or as a list.",
       "type": [
         "string",
         "array"
       ],
       "items": {
         "type": "string"
-      },
-      "description": "The list of target nodes to connect to, either in the same format as Bolt expects (a comma-separated string), or as a list."
-    },
-    "credentials": {
-      "type": "object",
-      "description": "A map of sensitive credential file names to content encoded using Base64.",
-      "additionalProperties": {
-        "type": "string"
       }
     },
-    "git": {
+    "project": {
       "type": "object",
-      "description": "A git repository to clone.",
+      "description": "The Bolt project to load and source tasks, plans, and other content from",
       "properties": {
-        "connection": {
-          "type": "object",
-          "x-relay-connectionType": "ssh",
-          "description": "A Relay SSH connection to use.",
-          "properties": {
-            "sshKey": {
-              "type": "string",
-              "description": "The SSH key to use when cloning the git repository."
-            }
-          }
-        },
-        "knownHosts": {
+        "type": {
           "type": "string",
-          "description": "SSH known hosts file."
+          "description": "What the project type is",
+          "enum": [
+            "git",
+            "tarball"
+          ]
         },
-        "name": {
+        "source": {
           "type": "string",
-          "description": "A directory name for the git clone."
+          "description": "Where to get the project from"
         },
-        "branch": {
+        "version": {
           "type": "string",
-          "description": "The Git branch to clone.",
-          "default": "master"
-        },
-        "repository": {
-          "type": "string",
-          "description": "The git repository URL."
+          "description": "The version to retrive from the source. Semantics vary depending on source type"
         }
       },
       "required": [
-        "name",
-        "repository"
+        "type",
+        "source"
       ]
+    },
+    "transport": {
+      "type": "object",
+      "description": "The default transport to use when connecting to targets",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "object",
+          "x-relay-connectionType": "ssh",
+          "properties": {
+            "sshKey": {
+              "type": "string",
+              "description": "the private ssh key for the connection"
+            }
+          }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "description": "A Bolt inventory to use when running this action",
+      "additionalProperties": true
     }
   },
   "required": [
     "type",
-    "name"
+    "name",
+    "project"
   ],
   "additionalProperties": false
 }
