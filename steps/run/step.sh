@@ -8,23 +8,111 @@ BOLT="${BOLT:-bolt}"
 JQ="${JQ:-jq}"
 NI="${NI:-ni}"
 
-echo "Using Puppet Bolt version: $($BOLT --version)"
-
 #
 # Variables
 #
 
 WORKDIR="${WORKDIR:-/workspace}"
+PROJDIR="${WORKDIR}/project"
+PARAMSFILE="${WORKDIR}/params.json"
+TARGETSFILE="${WORKDIR}/targets.txt"
+OUTPUTFILE="${WORKDIR}/output.json"
 
 #
+# Functions
 #
-#
+
+function main() {
+  echo "Using Puppet Bolt version: $($BOLT --version)"
+
+  ni credentials config -d "${WORKDIR}/creds"
+
+  # Fetch and set up the project directory
+  load_project
+
+  # Configure the inventory Bolt will use to run the action
+  configure_inventory
+
+  # Set up the params.json and targets.txt files
+  prepare_inputs
+
+  # Run the bolt action
+  run_bolt
+
+  # Set the output
+  ni output set --key output --value "$(cat "${OUTPUTFILE}")" --json
+}
+
 usage() {
   echo "usage: $@" >&2
   exit 1
 }
 
-$NI credentials config -d "${WORKDIR}/creds"
+function load_project() {
+  local proj_type="$(ni get -p '{ .project.type }')"
+  local proj_src="$(ni get -p '{ .project.source }')"
+  local proj_ver="$(ni get -p '{ .project.version }')"
+
+  # Deploy the project from its source
+  case "${proj_type}" in
+  git)
+    git clone "${proj_src}" "${PROJDIR}"
+    ;;
+  tarball)
+    wget "${proj_src}" -O "${WORKDIR}/project.tar.gz"
+    mkdir "${PROJDIR}"
+    tar -C "${PROJDIR}" -xzf "${WORKDIR}/project.tar.gz"
+    ;;
+  '')
+    ni log fatal "spec: missing required parameter, 'project.type'"
+    ;;
+  *)
+    ni log fatal "spec: specify 'project.type' as one of 'git' or 'tarball'; recieved '${project_type}'"
+  esac
+
+  # Pull down any modules required by the project
+  pushd "${PROJDIR}"
+  bolt module install --project .
+  popd
+}
+
+function configure_inventory() {
+  echo "configure_inventory: not implemented"
+}
+
+function prepare_inputs() {
+  local bolt_defaults='/etc/puppetlabs/bolt/bolt-defaults.yaml'
+  ni get | 'try .parameters // {}' > "${PARAMSFILE}"
+  ni get | 'try .targets | join("\n") // empty' > "${TARGETSFILE}"
+
+  mkdir -p /etc/puppetlabs/bolt
+  touch "${bolt_defaults}"
+  echo '---' > "${bolt_defaults}"
+}
+
+function run_bolt() {
+  local action="$(ni get -p '{ .type }')"
+  local name="$(ni get -p '{ .name }')"
+
+  pushd "${PROJDIR}"
+
+  bolt "${action}" run "${name}" \
+    --project . \
+    --params "@${PARAMSFILE}" \
+    --targets "@${TARGETSFILE}" \
+    --format json \
+    > "${OUTPUTFILE}"
+
+  popd
+}
+
+main
+exit 0
+
+#
+# OLD STUFF
+#
+
 
 BOLT_DEFAULTS='{}'
 declare -a BOLT_ARGS
