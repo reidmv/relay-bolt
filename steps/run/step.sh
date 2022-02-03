@@ -1,109 +1,139 @@
 #!/bin/bash
 
 #
-# Commands
-#
-
-BOLT="${BOLT:-bolt}"
-JQ="${JQ:-jq}"
-NI="${NI:-ni}"
-
-#
 # Variables
 #
 
+HOME=${HOME:-$(getent passwd "$(id -un)" | cut -d : -f 6)}
 WORKDIR="${WORKDIR:-/workspace}"
 PROJDIR="${WORKDIR}/project"
 PARAMSFILE="${WORKDIR}/params.json"
 TARGETSFILE="${WORKDIR}/targets.txt"
 OUTPUTFILE="${WORKDIR}/output.json"
+INVENTORYFILE="${WORKDIR}/inventory.yaml"
 
 #
 # Functions
 #
 
 function main() {
-  echo "Using Puppet Bolt version: $($BOLT --version)"
+	echo "Using Puppet Bolt version: $($BOLT --version)"
 
-  ni credentials config -d "${WORKDIR}/creds"
+	ni credentials config -d "${WORKDIR}/creds"
 
-  # Fetch and set up the project directory
-  load_project
+	# Fetch and set up the project directory
+	load_project
 
-  # Configure the inventory Bolt will use to run the action
-  configure_inventory
+	# Configure the inventory Bolt will use to run the action
+	configure_inventory
 
-  # Set up the params.json and targets.txt files
-  prepare_inputs
+	# Set up the params.json and targets.txt files
+	prepare_inputs
 
-  # Run the bolt action
-  run_bolt
+	# Run the bolt action
+	run_bolt
+	local bolt_exit_code="$?"
 
-  # Set the output
-  ni output set --key output --value "$(cat "${OUTPUTFILE}")" --json
-}
-
-usage() {
-  echo "usage: $@" >&2
-  exit 1
+	# Set the output
+	ni output set --key output --value "$(cat "${OUTPUTFILE}")" --json
+	exit "${bolt_exit_code}"
 }
 
 function load_project() {
-  local proj_type="$(ni get -p '{ .project.type }')"
-  local proj_src="$(ni get -p '{ .project.source }')"
-  local proj_ver="$(ni get -p '{ .project.version }')"
+	local proj_type="$(ni get -p '{ .project.type }')"
+	local proj_src="$(ni get -p '{ .project.source }')"
+	local proj_ver="$(ni get -p '{ .project.version }')"
 
-  # Deploy the project from its source
-  case "${proj_type}" in
-  git)
-    git clone "${proj_src}" "${PROJDIR}"
-    ;;
-  tarball)
-    wget "${proj_src}" -O "${WORKDIR}/project.tar.gz"
-    mkdir "${PROJDIR}"
-    tar -C "${PROJDIR}" -xzf "${WORKDIR}/project.tar.gz"
-    ;;
-  '')
-    ni log fatal "spec: missing required parameter, 'project.type'"
-    ;;
-  *)
-    ni log fatal "spec: specify 'project.type' as one of 'git' or 'tarball'; recieved '${project_type}'"
-  esac
+	# Deploy the project from its source
+	case "${proj_type}" in
+	tarball)
+		wget "${proj_src}" -O "${WORKDIR}/project.tar.gz"
+		mkdir "${PROJDIR}"
+		tar -C "${PROJDIR}" -xzf "${WORKDIR}/project.tar.gz"
+		;;
+	git)
+		local sshkey="$(ni get -p '{ .project.connection.sshKey }')"
+		if [ ! -z "${sshkey}" ]; then
+			cat > "${WORKDIR}/git.ssh.key" <<-EOF
+				${sshkey}
+			EOF
+			mkdir -p "${HOME}/.ssh"
+			cat > "${HOME}/.ssh/config" <<-EOF
+				Host *
+				    StrictHostKeyChecking no
+				    IdentityFile ${WORKDIR}/git.ssh.key
+			EOF
+		fi
+		git clone "${proj_src}" "${PROJDIR}"
+		;;
+	esac
 
-  # Pull down any modules required by the project
-  pushd "${PROJDIR}"
-  bolt module install --project .
-  popd
+	# Pull down any modules required by the project
+	pushd "${PROJDIR}"
+		bolt module install --project .
+	popd
 }
 
 function configure_inventory() {
-  echo "configure_inventory: not implemented"
+	local inventory=$(ni get -p  '{ .inventory }')
+
+	# If an inventory was specified, write it to a workdir inventory file
+	# location. If no inventory was specified, set the inventory file variable
+	# to the default project location.
+	if [ ! -z "${inventory}" ]; then
+		cat > "${INVENTORYFILE}" <<-EOF
+			${inventory}
+		EOF
+	else
+		INVENTORYFILE="${PROJDIR}/inventory.yaml"
+	fi
 }
 
 function prepare_inputs() {
-  local bolt_defaults='/etc/puppetlabs/bolt/bolt-defaults.yaml'
-  ni get | 'try .parameters // {}' > "${PARAMSFILE}"
-  ni get | 'try .targets | join("\n") // empty' > "${TARGETSFILE}"
+	local bolt_defaults='/etc/puppetlabs/bolt/bolt-defaults.yaml'
+	local username="$(ni get | jq -r 'try .transport.username // "root"')"
+	local runas="$(ni get | jq -r 'try .transport."run-as" // "root"')"
+	local sshkey="$(ni get -p '{ .transport.connection.sshKey }')"
 
-  mkdir -p /etc/puppetlabs/bolt
-  touch "${bolt_defaults}"
-  echo '---' > "${bolt_defaults}"
+	cat > "${WORKDIR}/transport.ssh.key" <<-EOF
+		${sshkey}
+	EOF
+
+	ni get | jq -r 'try .parameters // {}' > "${PARAMSFILE}"
+	ni get | jq -r 'try .targets | join("\n") // empty' > "${TARGETSFILE}"
+
+	mkdir -p /etc/puppetlabs/bolt
+	touch "${bolt_defaults}"
+	cat > "${bolt_defaults}" <<-EOF
+		---
+		spinner: false
+		save-rerun: false
+		inventory-config:
+		  ssh:
+		    user: ${username}
+		    private-key: "${WORKDIR}/transport.ssh.key"
+		    host-key-check: false
+		    tty: false
+		    run-as: ${runas}
+	EOF
 }
 
 function run_bolt() {
-  local action="$(ni get -p '{ .type }')"
-  local name="$(ni get -p '{ .name }')"
+	local action="$(ni get -p '{ .type }')"
+	local name="$(ni get -p '{ .name }')"
 
-  pushd "${PROJDIR}"
+	pushd "${PROJDIR}"
+		bolt "${action}" run "${name}" \
+		  --project . \
+		  --inventoryfile "${INVENTORYFILE}" \
+		  --params "@${PARAMSFILE}" \
+		  --targets "@${TARGETSFILE}" \
+		  --format json \
+		  > "${OUTPUTFILE}"
+		local exit_code="$?"
+	popd
 
-  bolt "${action}" run "${name}" \
-    --project . \
-    --params "@${PARAMSFILE}" \
-    --targets "@${TARGETSFILE}" \
-    --format json \
-    > "${OUTPUTFILE}"
-
-  popd
+	return "${exit_code}"
 }
 
 main
