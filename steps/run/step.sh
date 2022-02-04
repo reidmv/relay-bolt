@@ -17,8 +17,9 @@ INVENTORYFILE="${WORKDIR}/inventory.yaml"
 #
 
 function main() {
-	echo "Using Puppet Bolt version: $($BOLT --version)"
+	echo "Using Puppet Bolt version: $(bolt --version)"
 
+	mkdir -p "${WORKDIR}"
 	ni credentials config -d "${WORKDIR}/creds"
 
 	# Fetch and set up the project directory
@@ -39,6 +40,15 @@ function main() {
 	exit "${bolt_exit_code}"
 }
 
+function fail() {
+	ni log fatal "FAIL: $@"
+	exit 1
+}
+
+function log() {
+	ni log "${1}" "${2}"
+}
+
 function load_project() {
 	local proj_type="$(ni get -p '{ .project.type }')"
 	local proj_src="$(ni get -p '{ .project.source }')"
@@ -47,29 +57,38 @@ function load_project() {
 	# Deploy the project from its source
 	case "${proj_type}" in
 	tarball)
+		log info 'Fetching project tarball using `wget`'
 		wget "${proj_src}" -O "${WORKDIR}/project.tar.gz"
 		mkdir "${PROJDIR}"
+		log info 'Extracting fetched tarball'
 		tar -C "${PROJDIR}" -xzf "${WORKDIR}/project.tar.gz"
 		;;
 	git)
+		log info 'Creating SSH config file for `git clone`'
+		cat > "${WORKDIR}/git-ssh-config" <<-EOF
+			Host *
+			    StrictHostKeyChecking no
+		EOF
 		local sshkey="$(ni get -p '{ .project.connection.sshKey }')"
 		if [ ! -z "${sshkey}" ]; then
-			cat > "${WORKDIR}/git.ssh.key" <<-EOF
-				${sshkey}
-			EOF
-			mkdir -p "${HOME}/.ssh"
-			cat > "${HOME}/.ssh/config" <<-EOF
-				Host *
-				    StrictHostKeyChecking no
-				    IdentityFile ${WORKDIR}/git.ssh.key
-			EOF
+			log info 'Configuring use of provided SSH connection for `git clone`'
+			printf %s "${sshkey}" > "${WORKDIR}/git.ssh.key"
+			chmod 0600 "${WORKDIR}/git.ssh.key"
+			echo "    IdentityFile ${WORKDIR}/git.ssh.key" >> "${WORKDIR}/git-ssh-config"
 		fi
-		git clone "${proj_src}" "${PROJDIR}"
+		cat > "${WORKDIR}/git-ssh" <<-EOF
+			#!/bin/bash
+			ssh -F "${WORKDIR}/git-ssh-config" "\$@"
+		EOF
+		chmod a+x "${WORKDIR}/git-ssh"
+		log info 'Cloning project Git repository'
+		GIT_SSH="${WORKDIR}/git-ssh" git clone "${proj_src}" "${PROJDIR}"
 		;;
 	esac
 
 	# Pull down any modules required by the project
 	pushd "${PROJDIR}"
+		log info 'Installing project modules'
 		bolt module install --project .
 	popd
 }

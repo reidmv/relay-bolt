@@ -1,0 +1,35 @@
+# filename: test-metadata.yaml
+# map of connections, named '<type>/<name>'
+connections:
+  ssh/test:
+    name: test
+    sshKey: |
+      one
+      two
+      three
+
+# single string valued secrets
+secrets:
+  test: test
+
+# now the data to be fed into pseudo-run 1 of this workflow
+runs:
+  '1':      # quoted string, not numeric! thanks YAML
+    steps:
+      first-step:
+        # the `spec` keys match what you'd see in a real workflow
+        spec:
+          type: "task"
+          name: "package"
+          parameters:
+            action: "status"
+            name: "vim-enhanced"
+          project:
+            source: "https://github.com/reidmv/bolt-project-protocolus.git"
+            type: "git"
+            version: "main"
+          targets:
+            - localhost
+          transport:
+            username: "root"
+            connection: ${connections.ssh.test}

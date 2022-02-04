@@ -48,6 +48,17 @@
         "version": {
           "type": "string",
           "description": "The version to retrive from the source. Semantics vary depending on source type"
+        },
+        "connection": {
+          "description": "A Relay SSH connection to use for retrieving the project, if needed",
+          "type": "object",
+          "x-relay-connectionType": "ssh",
+          "properties": {
+            "sshKey": {
+              "type": "string",
+              "description": "the private ssh key for the connection"
+            }
+          }
         }
       },
       "required": [
@@ -60,9 +71,15 @@
       "description": "The default transport to use when connecting to targets",
       "properties": {
         "username": {
+          "description": "The default user to connect to targets with",
+          "type": "string"
+        },
+        "run-as": {
+          "description": "The default user to escalate to when running commands, after connecting to targets",
           "type": "string"
         },
         "connection": {
+          "description": "A default Relay SSH connection to use when connecting to targets",
           "type": "object",
           "x-relay-connectionType": "ssh",
           "properties": {
