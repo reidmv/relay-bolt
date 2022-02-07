@@ -79,15 +79,19 @@
           "type": "string"
         },
         "connection": {
-          "description": "A default Relay SSH connection to use when connecting to targets",
           "type": "object",
-          "x-relay-connectionType": "ssh",
-          "properties": {
-            "sshKey": {
-              "type": "string",
-              "description": "the private ssh key for the connection"
+          "oneOf": [
+            {
+              "description": "A Relay SSH connection to use when connecting to targets",
+              "x-relay-connectionType": "ssh",
+              "properties": {
+                "sshKey": {
+                  "type": "string",
+                  "description": "the private ssh key for the connection"
+                }
+              }
             }
-          }
+          ]
         }
       }
     },
