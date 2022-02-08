@@ -94,12 +94,13 @@ function load_project() {
 }
 
 function configure_inventory() {
-	local inventory=$(ni get -p  '{ .inventory }')
+	local inventory="$(ni get | jq -r 'try .inventory // ""')"
 
 	# If an inventory was specified, write it to a workdir inventory file
 	# location. If no inventory was specified, set the inventory file variable
 	# to the default project location.
 	if [ ! -z "${inventory}" ]; then
+		INVENTORYFILE="${WORKDIR}/inventory.yaml"
 		cat > "${INVENTORYFILE}" <<-EOF
 			${inventory}
 		EOF
