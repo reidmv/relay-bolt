@@ -1,7 +1,7 @@
 FROM puppet/puppet-bolt:latest
 ENV LANG C.UTF-8
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y curl git jq openssh-client wget xz-utils && \
+    apt-get install --no-install-recommends -y curl git jq openssh-client wget xz-utils puppet-bolt && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 RUN set -eux ; \
