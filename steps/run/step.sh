@@ -135,19 +135,29 @@ function prepare-inputs() {
 	ni get | jq -r 'try .targets | join("\n") // empty' > "${TARGETSFILE}"
 
 	log info '### Preparing bolt-defaults.yaml file...'
-	mkdir -p /etc/puppetlabs/bolt
-	cat > "${bolt_defaults}" <<-EOF
-		---
-		spinner: false
-		save-rerun: false
-		inventory-config:
-		  ssh:
-		    user: ${username}
-		    private-key: "${WORKDIR}/transport.ssh.key"
-		    host-key-check: false
-		    tty: false
-		    run-as: ${runas}
+	local f_override="${WORKDIR}/bolt-defaults-overrides.json"
+	local f_transport="${WORKDIR}/bolt-defaults-transport.json"
+	local f_spec="${WORKDIR}/bolt-defaults-spec.json"
+
+	cat > "${f_transport}" <<-EOF
+		{ "inventory-config":
+			{ "ssh":
+		     { "user": "${username}",
+		       "private-key": "${WORKDIR}/transport.ssh.key",
+		       "host-key-check": false,
+		       "tty": false,
+		       "run-as": "${runas}" } } }
 	EOF
+	cat > "${f_spec}" <<-EOF
+		$(ni get | jq -r 'try ."bolt-defaults" // {}')
+	EOF
+	cat > "${f_override}" <<-EOF
+		{ "spinner": false,
+		  "save-rerun": false }
+	EOF
+
+	mkdir -p /etc/puppetlabs/bolt
+	jq -s '.[0] * .[1] * .[2]' "${f_transport}" "${f_spec}" "${f_override}" > "${bolt_defaults}"
 }
 
 function execute-action() {

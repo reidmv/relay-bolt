@@ -100,6 +100,11 @@
       "type": "object",
       "description": "A Bolt inventory to use when running this action",
       "additionalProperties": true
+    },
+    "bolt-defaults": {
+      "type": "object",
+      "description": "Configuration to write to bolt-defaults.yaml. Note: specifying inventory-config here will override Relay transport options",
+      "additionalProperties": true
     }
   },
   "required": [
