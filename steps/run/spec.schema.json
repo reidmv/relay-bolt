@@ -6,13 +6,14 @@
       "type": "string",
       "enum": [
         "task",
-        "plan"
+        "plan",
+        "policy"
       ],
       "description": "The type of Bolt action."
     },
     "name": {
       "type": "string",
-      "description": "The name of the Bolt task or plan to run."
+      "description": "The name of the Bolt task, plan, or policy to execute."
     },
     "parameters": {
       "type": "object",

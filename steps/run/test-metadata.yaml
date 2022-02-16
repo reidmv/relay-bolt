@@ -33,3 +33,4 @@ runs:
           transport:
             username: "root"
             connection: ${connections.ssh.test}
+          inventory: {}
