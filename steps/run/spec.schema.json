@@ -7,7 +7,7 @@
       "enum": [
         "task",
         "plan",
-        "policy"
+        "apply"
       ],
       "description": "The type of Bolt action."
     },
