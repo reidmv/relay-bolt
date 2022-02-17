@@ -31,9 +31,6 @@ function main() {
 	# Set up the params.json and targets.txt files
 	prepare-inputs
 
-	# TODO: provide and handle additional bolt configuration options input
-	#       parameter
-
 	# Run the bolt action
 	execute-action
 	local bolt_exit_code="$?"
@@ -91,12 +88,6 @@ function load-project() {
 		GIT_SSH="${WORKDIR}/git-ssh" git clone "${proj_src}" "${PROJDIR}"
 		;;
 	esac
-
-	# Pull down any modules required by the project
-	pushd "${PROJDIR}"
-		log info '### Installing project modules...'
-		bolt module install --project .
-	popd
 }
 
 function configure-inventory() {
@@ -122,6 +113,9 @@ function prepare-inputs() {
 	local username="$(ni get | jq -r 'try .transport.username // "root"')"
 	local runas="$(ni get | jq -r 'try .transport."run-as" // "root"')"
 	local sshkey="$(ni get -p '{ .transport.connection.sshKey }')"
+	local f_override="${WORKDIR}/bolt-defaults-overrides.json"
+	local f_transport="${WORKDIR}/bolt-defaults-transport.json"
+	local f_spec="${WORKDIR}/bolt-defaults-spec.json"
 
 	log info '### Configuring default transport...'
 	cat > "${WORKDIR}/transport.ssh.key" <<-EOF
@@ -135,10 +129,6 @@ function prepare-inputs() {
 	ni get | jq -r 'try .targets | join("\n") // empty' > "${TARGETSFILE}"
 
 	log info '### Preparing bolt-defaults.yaml file...'
-	local f_override="${WORKDIR}/bolt-defaults-overrides.json"
-	local f_transport="${WORKDIR}/bolt-defaults-transport.json"
-	local f_spec="${WORKDIR}/bolt-defaults-spec.json"
-
 	cat > "${f_transport}" <<-EOF
 		{ "inventory-config":
 			{ "ssh":
@@ -156,6 +146,7 @@ function prepare-inputs() {
 		  "save-rerun": false }
 	EOF
 
+	# Merge together all the inputs into a bolt-defaults.yaml file
 	mkdir -p /etc/puppetlabs/bolt
 	jq -s '.[0] * .[1] * .[2]' "${f_transport}" "${f_spec}" "${f_override}" > "${bolt_defaults}"
 }
@@ -181,8 +172,10 @@ function bolt-run() {
 	local action="${1}"
 	local name="${2}"
 
-	log info '### Running bolt...'
 	pushd "${PROJDIR}"
+		log info '### Installing project modules...'
+		bolt module install --project .
+		log info '### Running bolt...'
 		bolt "${action}" run "${name}" \
 		  --project . \
 		  --inventoryfile "${INVENTORYFILE}" \
@@ -210,8 +203,16 @@ function bolt-apply() {
 	EOF
 
 	pushd "${PROJDIR}"
-		# Needed for loadjson() function
-		bolt module add puppetlabs/stdlib
+		if grep -q stdlib bolt-project.yaml; then
+			# Note: assuming that puppetlabs/stdlib is present in the project
+			log info '### Installing project modules...'
+			bolt module install --project .
+		else
+			# Needed for loadjson() function
+			log info '### Installing project modules - adding puppetlabs/stdlib for apply...'
+			bolt module add puppetlabs/stdlib --project .
+		fi
+		log info '### Running bolt...'
 		bolt apply "${WORKDIR}/apply.pp" \
 		  --project . \
 		  --inventoryfile "${INVENTORYFILE}" \
