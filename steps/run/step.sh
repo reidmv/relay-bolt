@@ -74,7 +74,7 @@ function load-project() {
 		EOF
 		local sshkey="$(ni get -p '{ .project.connection.sshKey }')"
 		if [ ! -z "${sshkey}" ]; then
-			log info 'Configuring use of provided SSH connection for `git clone`'
+			log info '#### Configuring use of provided SSH connection for `git clone`'
 			printf %s "${sshkey}" > "${WORKDIR}/git.ssh.key"
 			chmod 0600 "${WORKDIR}/git.ssh.key"
 			echo "    IdentityFile ${WORKDIR}/git.ssh.key" >> "${WORKDIR}/git-ssh-config"
@@ -84,8 +84,12 @@ function load-project() {
 			ssh -F "${WORKDIR}/git-ssh-config" "\$@"
 		EOF
 		chmod a+x "${WORKDIR}/git-ssh"
-		log info 'Cloning project Git repository'
+		log info '#### Cloning project Git repository'
 		GIT_SSH="${WORKDIR}/git-ssh" git clone "${proj_src}" "${PROJDIR}"
+		if [ ! -z "${proj_ver}" ]; then
+			log info "#### Checking out version ${proj_ver}"
+			git --git-dir "${PROJDIR}/.git" --work-tree "${PROJDIR}" checkout "${proj_ver}"
+		fi
 		;;
 	esac
 }
