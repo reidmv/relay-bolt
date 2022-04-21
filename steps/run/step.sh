@@ -155,7 +155,6 @@ function prepare-inputs() {
 		}
 	EOF
 
-	EOF
 	cat > "${f_spec}" <<-EOF
 		$(ni get | jq -r 'try ."bolt-defaults" // {}')
 	EOF
