@@ -135,12 +135,26 @@ function prepare-inputs() {
 	log info '### Preparing bolt-defaults.yaml file...'
 	cat > "${f_transport}" <<-EOF
 		{ "inventory-config":
-			{ "ssh":
-		     { "user": "${username}",
-		       "private-key": "${WORKDIR}/transport.ssh.key",
-		       "host-key-check": false,
-		       "tty": false,
-		       "run-as": "${runas}" } } }
+		  { "ssh":
+		    {
+	EOF
+	[ ! -z "$username" ] && cat >> "${f_transport}" <<-EOF
+		      "user": "${username}",
+	EOF
+	[ ! -z "$sshkey" ] && cat >> "${f_transport}" <<-EOF
+		      "private-key": "${WORKDIR}/transport.ssh.key",
+	EOF
+	[ ! -z "$runas" ] && cat >> "${f_transport}" <<-EOF
+		      "run-as": "${runas}",
+	EOF
+	cat >> "${f_transport}" <<-EOF
+		      "host-key-check": false,
+		      "tty": false
+		    }
+		  }
+		}
+	EOF
+
 	EOF
 	cat > "${f_spec}" <<-EOF
 		$(ni get | jq -r 'try ."bolt-defaults" // {}')
